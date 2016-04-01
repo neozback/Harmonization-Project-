@@ -1,0 +1,225 @@
+#scipt for Harmonia Project 
+  rm(list = ls())
+
+
+#connecting MySQL to the RSTUDIO ... you need local host , databasename , usernmae and password 
+conDplyr = src_mysql(dbname = "protest", user = "root", 
+                     password = "1101", host = "127.0.0.1")
+
+#Slice the data from relational database and then get it into R 
+myData <- conDplyr %>%
+  tbl("master_enriched") %>%
+  select(t_source_table, t_case_id, t_survey_name, t_survey_edition, 
+         t_interview_year, s_country, t_l1u_country_alpha_2, t_l2u_country_alpha_2, 
+         t_survey_set, s_pr_demonst, t_pr_demonst_fact,t_pr_demonst_opinion,
+         c_pr_demonst_years,c_pr_demonst_extended,c_pr_demonst_illegal,c_pr_demonst_set_of_questions,
+         qs_rsp_rate,qs_transl,qs_pretest,qs_fieldw_ctrl,qr_duplicate)
+%>%
+  collect() 
+
+head(myData)
+hdata <- collect(myData)
+
+class(myData)
+#convert the data inro data frame from MySQL table format .. 
+Harm_data <- as.data.frame(hdata)
+class(Harm_data)
+#convert it into a local table frame 
+Harm_data1 <- tbl_df(Harm_data)
+rm("Harm_data")
+
+
+#recoding for the protest participation and opnion 
+ Harm_data1 %>% mutate(pr_demo_fact = replace(t_pr_demonst_fact, t_pr_demonst_fact<0, NA))
+Harm_data1 <-   Harm_data1 %>% mutate(pr_demonst_fact = replace(t_pr_demonst_fact, t_pr_demonst_fact<0, NA))
+
+ Harm_data1 %>% mutate(pr_demo_opnion = replace(t_pr_demonst_opinion, t_pr_demonst_opinion<0, NA))
+Harm_data1 <- Harm_data1 %>% mutate(pr_demo_opnion = replace(t_pr_demonst_opinion, t_pr_demonst_opinion<0, NA))
+
+filter(Harm_data1,t_l2u_country_alpha_2=="RU",t_pr_demonst_fact==1 )
+
+(Harm_data1$t_pr_demonst_fact)
+
+
+
+
+
+
+
+
+#gives the mean values of participation for each part across each country ... 
+Harm_data1 %>%
+  group_by(t_l2u_country_alpha_2) %>%
+  summarise(prot_1 = mean(pr_demonst_fact, na.rm=TRUE), mean(pr_demo_opnion,na.rm=TRUE)) 
+
+
+Harm_data1 %>% select(t_l2u_country_alpha_2,t_survey_name,t_survey_edition,c_pr_demonst_years,
+                  c_pr_demonst_extended,pr_demo_opnion, pr_demonst_fact)  
+vars <- Harm_data1 %>% select(t_l2u_country_alpha_2,t_survey_name,t_survey_edition,c_pr_demonst_years,
+                              c_pr_demonst_extended, pr_demo_opnion, pr_demonst_fact)  
+
+
+
+
+
+
+
+
+
+#number of respondents from each country  and survey 
+Harm_data1 %>% group_by(t_l2u_country_alpha_2, t_survey_name) %>% summarise(cnt=n())%>% 
+  print(n='inf')
+#number of respondents by country , by survey and by wave 
+Harm_data1 %>% group_by(t_l2u_country_alpha_2, t_survey_name, t_survey_edition) %>% summarise(cnt=n())%>% 
+  print(n='inf')
+
+#calculating the number of groups 
+Harm_data1 %>% group_by(t_survey_edition)%>% n_groups()
+
+#group by countries and how many surveys for each country... Looking into how much a single 
+#survey covers each country in each wave 
+Harm_data1 %>% 
+  group_by(t_l2u_country_alpha_2, t_survey_name) %>% 
+  summarise(Resp= n(), sur_each=n_distinct(t_survey_edition)) %>% 
+  print(n='inf')
+
+
+
+
+
+
+#arrange by survey with over years in question data and response rate  with min and max 
+
+#for each country counting the number of waves and respondents 
+#NOT Working
+Harm_data1 %>% 
+      group_by(t_l2u_country_alpha_2)
+       %>% summarise(respondents=n(), waves_count=n_distinct(t_survey_name))
+         
+ 
+ 
+
+#mean value of protest participation across surveys 
+
+Harm_data1 %>% 
+  group_by(t_survey_name) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), pr_demonst_fact,pr_demo_opnion)
+
+Harm_data1 %>% 
+  group_by(t_survey_name,desc(t_survey_edition)) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), pr_demonst_fact,pr_demo_opnion)%>% 
+  print(n='Inf')
+#the mean protest score for country by year and in different surveys.. Check out if two or mroe surveys
+#cover one country in a single year 
+Harm_data1 %>% 
+  group_by(t_l2u_country_alpha_2,t_interview_year) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), pr_demonst_fact,pr_demo_opnion)%>% 
+  print(n='Inf')
+
+> Harm_data1 %>% count(desc(t_interview_year),t_l2u_country_alpha_2) %>% ungroup() %>% 
+   arrange(desc(n)) 
+
+
+is.na(Harm_data1$pr_demo_opnion)
+
+#how each survey asks about the number of years in question
+
+Harm_data1 %>% 
+  group_by(t_survey_name) %>% 
+  summarise_each(funs(min(.,na.rm=TRUE), max(.,na.rm=TRUE)),matches("c_pr_demonst_years")) %>% 
+  print(n='inf')
+
+#if the survey asked the protest was illegal 
+Harm_data1 %>% 
+  group_by(c_pr_demonst_illegal) %>% 
+  summarise_each(funs(min(.,na.rm=TRUE), max(.,na.rm=TRUE)),matches("t_survey_name")) %>% 
+  print(n='inf')
+
+#did the question ask about other forms of protest... grouped by survey
+Harm_data1 %>% 
+  group_by(t_survey_name) %>% 
+  summarise_each(funs(min(.,na.rm=TRUE), max(.,na.rm=TRUE)),matches("c_pr_demonst_extended")) %>% 
+  print(n='inf')
+
+Harm_data1 %>% 
+  group_by(t_survey_name) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), c_pr_demonst_extended) %>% 
+  print(n='inf')
+
+
+
+#grouped by country with mean response to fact 
+Harm_data1 %>% 
+  group_by(t_l2u_country_alpha_2) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), pr_demonst_fact)
+
+#grouped by country with mean response to opnion  
+Harm_data1 %>% 
+  group_by(t_l2u_country_alpha_2) %>% 
+  summarise_each(funs(mean(.,na.rm=TRUE)), pr_demo_opnion)
+
+#how years in question affects response 
+Harm_data1 %>% 
+  group_by(t_survey_name)
+      %>% summarise_each(funs(min(.,na.rm=TRUE), max(.,na.rm=TRUE)),matches("t_survey_edition"))
+#response for each country both opnion and fact comparing it to 
+
+#countries with more than two waves .. 
+
+########Filters##############
+Harm_data1 %>% filter(c_pr_demonst_illegal %in% t_survey_name)
+
+
+
+
+################################################################################################the csv ones ################################3
+
+Harm_data1 %>%
+   group_by(t_l2u_country_alpha_2,t_survey_name,t_interview_year) %>%
+   summarize(n_obs = n(),mean(pr_demonst_fact, na.rm=TRUE), mean(pr_demo_opnion,na.rm=TRUE)) %>%
+  write.csv(.,file = "E:/warsaw/obs_bycntry_wave_protmean.csv")
+
+ 
+ 
+ Harm_data1 %>%
+   group_by(t_l2u_country_alpha_2,t_survey_edition) %>%
+   summarize(n_obs = n(),
+             n_years = n_distinct(t_interview_year)) %>% 
+   print(n='Inf') %>%
+   write.csv(.,file = "E:/warsaw/excel/cntry_survey_distinct year.csv") 
+ 
+ 
+ Harm_data1 %>%
+   group_by(c_pr_demonst_years) %>%
+   summarize(n_obs = n()) %>% 
+   print(n='Inf') %>% 
+   write.csv(.,file = "E:/warsaw/excel/year_observ.csv")
+ 
+ Harm_data1 %>%
+   group_by(c_pr_demonst_illegal, t_l2u_country_alpha_2,t_interview_year, t_survey_name) %>%
+   summarize(n_obs = n()) %>% 
+   arrange(desc(c_pr_demonst_illegal), desc(t_interview_year))%>% 
+  filter(c_pr_demonst_illegal == 1)%>%
+   ungroup() %>% 
+   print(n='Inf') %>% 
+   write.csv(.,file = "E:/warsaw/excel/Illegal_cntry_observ_survey_sorted.csv")
+ 
+ Harm_data1 %>%
+   group_by(c_pr_demonst_extended, t_l2u_country_alpha_2,t_interview_year, t_survey_name) %>%
+   summarize(n_obs = n()) %>% 
+   arrange(desc(c_pr_demonst_extended), desc(t_interview_year))%>% 
+   filter(c_pr_demonst_extended == 1)%>%
+   ungroup() %>% 
+   print(n='Inf') %>% 
+   write.csv(.,file = "E:/warsaw/excel/extended_cntry_observ_survey_sorted.csv")
+ 
+ Harm_data1 %>% 
+   group_by(t_survey_name) %>% 
+   summarise_each(obs=n()) c_pr_demonst_extended) %>% 
+   print(n='inf')
+
+
+Harm_data1 %>%
+  group_by(t_l2u_country_alpha_2,t_interview_year, t_survey_name) %>%
+  summarize(n_obs = n()) %>% 
+    write.csv(.,file = "E:/warsaw/excel/cntry_observ_survey_sorted1.csv")
